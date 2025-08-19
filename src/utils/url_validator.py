@@ -31,7 +31,9 @@ class URLValidator:
                 r'https?://(?:www\.)?facebook\.com/[\w.-]+/posts/\d+',
                 r'https?://(?:m\.)?facebook\.com/watch/?\?v=\d+',
                 r'https?://(?:www\.)?fb\.watch/[\w-]+',
-                r'https?://(?:www\.)?facebook\.com/share/v/[\w]+/'
+                r'https?://(?:www\.)?facebook\.com/share/v/[\w]+/',
+                r'https?://(?:www\.)?facebook\.com/reel/\d+/?.*',  # Support for Facebook reels
+                r'https?://(?:www\.)?facebook\.com/[\w.-]+/reel/\d+/?.*'  # User-specific reels
             ]
         }
         
@@ -198,7 +200,9 @@ class URLValidator:
             'facebook': [
                 'https://www.facebook.com/watch/?v=123456789012345',
                 'https://www.facebook.com/username/videos/123456789012345',
-                'https://fb.watch/abc123def456'
+                'https://fb.watch/abc123def456',
+                'https://www.facebook.com/reel/123456789012345',
+                'https://www.facebook.com/username/reel/123456789012345'
             ]
         }
         

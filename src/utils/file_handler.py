@@ -108,7 +108,7 @@ class FileHandler:
                 metadata.get('level2_comments', ''),
                 len(comments),
                 metadata.get('total_comments_claimed', ''),
-                abs(int(metadata.get('total_comments_claimed', 0)) - len(comments)) if metadata.get('total_comments_claimed', '').isdigit() else ''
+                abs(int(metadata.get('total_comments_claimed', 0)) - len(comments)) if str(metadata.get('total_comments_claimed', '')).isdigit() else ''
             ]
             
             for col_num, value in enumerate(metadata_values, 1):
@@ -200,7 +200,7 @@ class FileHandler:
                 metadata.get('level2_comments', ''),
                 len(comments),
                 metadata.get('total_comments_claimed', ''),
-                abs(int(metadata.get('total_comments_claimed', 0)) - len(comments)) if metadata.get('total_comments_claimed', '').isdigit() else ''
+                abs(int(metadata.get('total_comments_claimed', 0)) - len(comments)) if str(metadata.get('total_comments_claimed', '')).isdigit() else ''
             ]
             
             # Añadir comentarios

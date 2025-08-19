@@ -61,9 +61,9 @@ class SocialMediaController:
                     platform = platform_map[platform_choice]
                     break
                 else:
-                    print(f"{Fore.RED}❌ Selección inválida. Ingresa 1, 2 o 3.")
+                    print(f"{Fore.RED}ERROR: Selección inválida. Ingresa 1, 2 o 3.")
             except KeyboardInterrupt:
-                print(f"\n{Fore.YELLOW}❌ Proceso cancelado por el usuario.")
+                print(f"\n{Fore.YELLOW}ERROR: Proceso cancelado por el usuario.")
                 sys.exit(0)
         
         # Número de URLs
@@ -73,11 +73,11 @@ class SocialMediaController:
                 if 1 <= num_urls <= 10:
                     break
                 else:
-                    print(f"{Fore.RED}❌ Debe ser entre 1 y 10 videos.")
+                    print(f"{Fore.RED}ERROR: Debe ser entre 1 y 10 videos.")
             except ValueError:
-                print(f"{Fore.RED}❌ Ingresa un número válido.")
+                print(f"{Fore.RED}ERROR: Ingresa un número válido.")
             except KeyboardInterrupt:
-                print(f"\n{Fore.YELLOW}❌ Proceso cancelado por el usuario.")
+                print(f"\n{Fore.YELLOW}ERROR: Proceso cancelado por el usuario.")
                 sys.exit(0)
         
         # Recolección de URLs
@@ -91,12 +91,12 @@ class SocialMediaController:
                     
                     if self.validator.is_valid_url(url, platform):
                         urls.append(url)
-                        print(f"{Fore.GREEN}✅ URL válida")
+                        print(f"{Fore.GREEN}OK: URL válida")
                         break
                     else:
-                        print(f"{Fore.RED}❌ URL inválida para {platform}. Intenta de nuevo.")
+                        print(f"{Fore.RED}ERROR: URL inválida para {platform}. Intenta de nuevo.")
                 except KeyboardInterrupt:
-                    print(f"\n{Fore.YELLOW}❌ Proceso cancelado por el usuario.")
+                    print(f"\n{Fore.YELLOW}ERROR: Proceso cancelado por el usuario.")
                     sys.exit(0)
         
         # Formato de salida
@@ -106,23 +106,23 @@ class SocialMediaController:
                 if format_choice in ['excel', 'csv']:
                     break
                 else:
-                    print(f"{Fore.RED}❌ Ingresa 'excel' o 'csv'.")
+                    print(f"{Fore.RED}ERROR: Ingresa 'excel' o 'csv'.")
             except KeyboardInterrupt:
-                print(f"\n{Fore.YELLOW}❌ Proceso cancelado por el usuario.")
+                print(f"\n{Fore.YELLOW}ERROR: Proceso cancelado por el usuario.")
                 sys.exit(0)
         
         return platform, urls, format_choice
     
     def process_urls(self, platform, urls, output_format):
         """Procesa las URLs y extrae los comentarios"""
-        print(f"\n{Fore.CYAN}🚀 Iniciando scraping de {len(urls)} video(s) de {platform.upper()}...")
+        print(f"\n{Fore.CYAN}Iniciando scraping de {len(urls)} video(s) de {platform.upper()}...")
         print()
         
         scraper = self.scrapers[platform]
         failed_urls = []
         
         for i, url in enumerate(urls, 1):
-            print(f"{Fore.YELLOW}📱 Procesando video {i}/{len(urls)}: {url[:50]}...")
+            print(f"{Fore.YELLOW}Procesando video {i}/{len(urls)}: {url[:50]}...")
             
             try:
                 # Crear barra de progreso
@@ -140,26 +140,26 @@ class SocialMediaController:
                         self.results.append(processed_data)
                         pbar.update(100)
                         
-                        print(f"{Fore.GREEN}✅ Video {i} completado: {result['data']['total_comments']} comentarios extraídos")
+                        print(f"{Fore.GREEN}OK: Video {i} completado: {result['data']['total_comments']} comentarios extraídos")
                     else:
                         failed_urls.append(url)
                         pbar.update(100)
-                        print(f"{Fore.RED}❌ Error en video {i}: {result.get('error', 'Error desconocido')}")
+                        print(f"{Fore.RED}ERROR: Error en video {i}: {result.get('error', 'Error desconocido')}")
                 
             except Exception as e:
                 failed_urls.append(url)
-                print(f"{Fore.RED}❌ Error inesperado en video {i}: {str(e)}")
+                print(f"{Fore.RED}ERROR: Error inesperado en video {i}: {str(e)}")
             
             # Pausa entre requests para evitar rate limiting
             if i < len(urls):
-                print(f"{Fore.BLUE}⏳ Esperando 2 segundos antes del siguiente video...")
+                print(f"{Fore.BLUE}Esperando 2 segundos antes del siguiente video...")
                 time.sleep(2)
         
         # Reporte final
-        print(f"\n{Fore.CYAN}📊 REPORTE FINAL:")
-        print(f"{Fore.GREEN}✅ Videos exitosos: {len(self.results)}/{len(urls)}")
+        print(f"\n{Fore.CYAN}REPORTE FINAL:")
+        print(f"{Fore.GREEN}OK: Videos exitosos: {len(self.results)}/{len(urls)}")
         if failed_urls:
-            print(f"{Fore.RED}❌ Videos fallidos: {len(failed_urls)}")
+            print(f"{Fore.RED}ERROR: Videos fallidos: {len(failed_urls)}")
             for url in failed_urls:
                 print(f"   • {url[:50]}...")
         
@@ -178,10 +178,10 @@ class SocialMediaController:
     def save_results(self, platform, output_format):
         """Guarda los resultados en el formato seleccionado"""
         if not self.results:
-            print(f"{Fore.RED}❌ No hay datos para guardar.")
+            print(f"{Fore.RED}ERROR: No hay datos para guardar.")
             return
             
-        print(f"\n{Fore.CYAN}💾 Guardando resultados en formato {output_format.upper()}...")
+        print(f"\n{Fore.CYAN}Guardando resultados en formato {output_format.upper()}...")
         
         # Crear nombre de archivo
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -193,18 +193,18 @@ class SocialMediaController:
             else:
                 filepath = self.file_handler.save_to_csv(self.results, platform, filename)
             
-            print(f"{Fore.GREEN}✅ Archivo guardado exitosamente:")
-            print(f"{Fore.WHITE}   📁 {filepath}")
+            print(f"{Fore.GREEN}OK: Archivo guardado exitosamente:")
+            print(f"{Fore.WHITE}   {filepath}")
             
             # Estadísticas finales
             total_comments = sum(len(result['comments']) for result in self.results)
-            print(f"\n{Fore.CYAN}📈 ESTADÍSTICAS:")
+            print(f"\n{Fore.CYAN}ESTADÍSTICAS:")
             print(f"{Fore.WHITE}   Videos procesados: {len(self.results)}")
             print(f"{Fore.WHITE}   Total de comentarios: {total_comments}")
             print(f"{Fore.WHITE}   Formato: {output_format.upper()}")
             
         except Exception as e:
-            print(f"{Fore.RED}❌ Error al guardar archivo: {str(e)}")
+            print(f"{Fore.RED}ERROR: Error al guardar archivo: {str(e)}")
     
     def run(self):
         """Ejecuta el flujo principal de la aplicación"""
@@ -214,7 +214,7 @@ class SocialMediaController:
             # Verificar configuración de ScrapFly
             config = ScrapFlyConfig()
             if not config.verify_connection():
-                print(f"{Fore.RED}❌ Error en la configuración de ScrapFly. Verifica tu API key.")
+                print(f"{Fore.RED}ERROR: Error en la configuración de ScrapFly. Verifica tu API key.")
                 input("Presiona Enter para continuar...")
                 return
             
@@ -228,12 +228,12 @@ class SocialMediaController:
             if success:
                 self.save_results(platform, output_format)
             else:
-                print(f"{Fore.RED}❌ No se pudo procesar ningún video exitosamente.")
+                print(f"{Fore.RED}ERROR: No se pudo procesar ningún video exitosamente.")
             
         except KeyboardInterrupt:
-            print(f"\n{Fore.YELLOW}❌ Proceso interrumpido por el usuario.")
+            print(f"\n{Fore.YELLOW}ERROR: Proceso interrumpido por el usuario.")
         except Exception as e:
-            print(f"{Fore.RED}❌ Error inesperado: {str(e)}")
+            print(f"{Fore.RED}ERROR: Error inesperado: {str(e)}")
         finally:
             print(f"\n{Fore.CYAN}Gracias por usar Social Media Scraper!")
             input("Presiona Enter para salir...")

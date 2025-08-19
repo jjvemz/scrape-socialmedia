@@ -66,7 +66,12 @@ if exist "venv\Scripts\activate.bat" (
 
 :: Actualizar pip en el entorno virtual
 echo [INFO] Actualizando pip...
-python -m pip install --upgrade pip --no-cache-dir
+python -m pip install --upgrade pip setuptools wheel --no-cache-dir
+
+:: Configurar pip para preferir wheels precompilados y evitar compilación
+echo [INFO] Configurando pip para usar wheels precompilados...
+set PIP_PREFER_BINARY=1
+set PIP_ONLY_BINARY=:all:
 
 :: Instalar dependencias básicas primero
 echo [INFO] Instalando dependencias básicas...
@@ -92,12 +97,38 @@ python -m pip install --no-cache-dir beautifulsoup4==4.12.2
 echo [INFO] Instalando OpenPyXL para Excel...
 python -m pip install --no-cache-dir openpyxl==3.1.2
 
-:: Intentar instalar lxml (opcional)
+:: Intentar instalar lxml con mejores opciones
 echo [INFO] Instalando lxml (opcional)...
-python -m pip install --no-cache-dir lxml==4.9.3 2>nul
+:: Deshabilitar temporalmente la variable para permitir más flexibilidad con lxml
+set PIP_ONLY_BINARY=
+:: Primero intentar con wheels precompilados
+python -m pip install --no-cache-dir --prefer-binary lxml 2>nul
 if %errorlevel% neq 0 (
-    echo [WARNING] lxml no se pudo instalar, pero no es crítico
+    echo [INFO] Intentando con versión estable de lxml...
+    python -m pip install --no-cache-dir --prefer-binary lxml==4.9.2 2>nul
+    if %errorlevel% neq 0 (
+        echo [INFO] Intentando versión más compatible de lxml...
+        python -m pip install --no-cache-dir --prefer-binary lxml==4.8.0 2>nul
+        if %errorlevel% neq 0 (
+            echo [INFO] Última tentativa con versión muy estable...
+            python -m pip install --no-cache-dir lxml==4.6.5 2>nul
+            if %errorlevel% neq 0 (
+                echo [WARNING] lxml no se pudo instalar, pero no es crítico.
+                echo [INFO] BeautifulSoup funcionará con el parser html.parser integrado.
+            ) else (
+                echo [OK] lxml 4.6.5 instalado correctamente
+            )
+        ) else (
+            echo [OK] lxml 4.8.0 instalado correctamente
+        )
+    ) else (
+        echo [OK] lxml 4.9.2 instalado correctamente
+    )
+) else (
+    echo [OK] lxml instalado correctamente
 )
+:: Restaurar la configuración
+set PIP_ONLY_BINARY=:all:
 
 :: Verificar que las dependencias críticas estén instaladas
 echo [INFO] Verificando instalación...
@@ -107,7 +138,27 @@ if %errorlevel% neq 0 (
     echo [INFO] Intentando reparar...
     
     :: Intentar instalar lo esencial sin versiones específicas
-    python -m pip install colorama requests openpyxl beautifulsoup4 scrapfly-sdk tqdm python-dotenv fake-useragent --no-cache-dir
+    python -m pip install colorama requests openpyxl beautifulsoup4 scrapfly-sdk tqdm python-dotenv fake-useragent --no-cache-dir --prefer-binary
+    
+    :: Verificar nuevamente
+    python -c "import colorama, requests, openpyxl, bs4, scrapfly; print('[OK] Reparación exitosa')" 2>nul
+    if %errorlevel% neq 0 (
+        echo [ERROR] No se pudieron instalar todas las dependencias críticas
+        echo [INFO] Intenta ejecutar el launcher como administrador
+        echo [INFO] O instala Visual Studio Build Tools si el problema persiste
+        pause
+        exit /b 1
+    )
+)
+
+:: Verificar parsers disponibles para BeautifulSoup
+echo [INFO] Verificando parsers de BeautifulSoup...
+python -c "from bs4 import BeautifulSoup; BeautifulSoup('<test></test>', 'html.parser'); print('[OK] Parser html.parser disponible')" 2>nul
+
+:: Intentar verificar lxml parser (opcional)
+python -c "from bs4 import BeautifulSoup; BeautifulSoup('<test></test>', 'lxml'); print('[OK] Parser lxml disponible')" 2>nul
+if %errorlevel% neq 0 (
+    echo [INFO] Parser lxml no disponible (usará html.parser como fallback)
 )
 
 echo.
