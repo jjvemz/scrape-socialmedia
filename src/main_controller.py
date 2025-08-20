@@ -66,6 +66,20 @@ class SocialMediaController:
                 print(f"\n{Fore.YELLOW}ERROR: Proceso cancelado por el usuario.")
                 sys.exit(0)
         
+        # Instagram authentication prompt
+        if platform == 'instagram':
+            print(f"\n{Fore.CYAN}INSTAGRAM AUTHENTICATION")
+            print(f"{Fore.YELLOW}Instagram requires login for full comment access.")
+            print(f"{Fore.WHITE}Without login, you may get limited data or errors.")
+            
+            use_auth = input(f"{Fore.GREEN}Do you want to login to Instagram? (y/n): {Style.RESET_ALL}").lower().strip()
+            
+            if use_auth in ['y', 'yes', 'si', 's']:
+                self._instagram_login()
+            else:
+                print(f"{Fore.YELLOW}Continuing without Instagram authentication...")
+                print(f"{Fore.WHITE}You may experience limited data extraction.")
+        
         # Número de URLs
         while True:
             try:
@@ -112,6 +126,43 @@ class SocialMediaController:
                 sys.exit(0)
         
         return platform, urls, format_choice
+    
+    def _instagram_login(self):
+        """Handle Instagram login process"""
+        import getpass
+        
+        try:
+            print(f"\n{Fore.CYAN}Instagram Login")
+            username = input(f"{Fore.GREEN}Username: {Style.RESET_ALL}").strip()
+            
+            if not username:
+                print(f"{Fore.RED}No username provided. Skipping authentication.")
+                return
+            
+            password = getpass.getpass(f"{Fore.GREEN}Password: {Style.RESET_ALL}")
+            
+            if not password:
+                print(f"{Fore.RED}No password provided. Skipping authentication.")
+                return
+            
+            print(f"{Fore.YELLOW}Logging in to Instagram...")
+            
+            # Get Instagram scraper and perform login
+            instagram_scraper = self.scrapers['instagram']
+            result = instagram_scraper.login(username, password)
+            
+            if result['success']:
+                print(f"{Fore.GREEN}✓ Instagram login successful!")
+                print(f"{Fore.WHITE}  You now have access to full comment data.")
+            else:
+                print(f"{Fore.RED}✗ Instagram login failed: {result.get('error', 'Unknown error')}")
+                print(f"{Fore.YELLOW}Continuing without authentication...")
+                
+        except KeyboardInterrupt:
+            print(f"\n{Fore.YELLOW}Login cancelled by user.")
+        except Exception as e:
+            print(f"{Fore.RED}Error during login: {str(e)}")
+            print(f"{Fore.YELLOW}Continuing without authentication...")
     
     def process_urls(self, platform, urls, output_format):
         """Procesa las URLs y extrae los comentarios"""

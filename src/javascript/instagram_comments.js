@@ -55,7 +55,7 @@
             }
             
             // 6. Pausa entre iteraciones
-            await sleep(2000);
+            await sleep(3500);
         }
         
         console.log(`✅ Carga completada. Total de comentarios: ${totalLoaded}`);
@@ -136,7 +136,7 @@
                     
                     button.click();
                     clicked = true;
-                    await sleep(3000); // Esperar más tiempo para Instagram
+                    await sleep(5000); // Esperar más tiempo para Instagram
                 } catch (error) {
                     console.warn('⚠️ Error haciendo clic:', error);
                 }
@@ -162,7 +162,7 @@
                     
                     button.click();
                     expanded++;
-                    await sleep(1500);
+                    await sleep(2500);
                     
                     // Límite de respuestas para evitar loops infinitos
                     if (expanded >= 20) break;

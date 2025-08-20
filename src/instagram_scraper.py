@@ -11,11 +11,42 @@ import random
 from bs4 import BeautifulSoup
 from datetime import datetime
 from utils.scrapfly_config import ScrapFlyConfig
+from utils.instagram_auth import InstagramAuth
+from utils.logger import get_logger
 
 class InstagramScraper:
     def __init__(self):
+        self.logger = get_logger()
         self.scrapfly = ScrapFlyConfig()
         self.limits = self.scrapfly.get_platform_limits('instagram')
+        self.auth = InstagramAuth(self.scrapfly.client)
+        self.is_logged_in = False
+        
+        self.logger.info("Instagram scraper initialized")
+        
+        # Try to load existing session
+        if self.auth.load_session():
+            self.is_logged_in = self.auth.is_authenticated()
+            if self.is_logged_in:
+                self.logger.info("Using existing Instagram session")
+            else:
+                self.logger.warning("Session loaded but not authenticated")
+    
+    def login(self, username, password):
+        """Login to Instagram for authenticated scraping"""
+        self.logger.info(f"Attempting Instagram login for user: {username}")
+        
+        result = self.auth.login(username, password)
+        
+        if result['success']:
+            self.is_logged_in = True
+            self.logger.log_auth_attempt(username, success=True)
+            self.logger.info("Instagram login successful - authenticated scraping enabled")
+        else:
+            self.logger.log_auth_attempt(username, success=False, error=result.get('error'))
+            self.logger.error(f"Instagram login failed: {result.get('error', 'Unknown error')}")
+        
+        return result
         
     def scrape_comments(self, url):
         """
@@ -28,25 +59,52 @@ class InstagramScraper:
             dict: Result with success/error and extracted data
         """
         try:
-            print(f"Starting Instagram scraping: {url[:50]}...")
+            self.logger.info(f"Starting Instagram scraping", {'url': url, 'authenticated': self.is_logged_in})
             
             # Step 1: Get page with embedded JavaScript data
+            self.logger.debug("Step 1: Loading page with embedded data")
             result = self._get_page_with_embedded_data(url)
             if not result['success']:
+                self.logger.error("Failed to load page", {'error': result.get('error')})
                 return result
             
+            self.logger.debug("Page loaded successfully", {'html_length': len(result['html'])})
+            
             # Step 2: Extract metadata
+            self.logger.debug("Step 2: Extracting metadata")
             metadata = self._extract_post_metadata(result['html'])
+            self.logger.debug("Metadata extracted", {'fields': list(metadata.keys())})
             
             # Step 3: Extract comments using multiple strategies
+            self.logger.debug("Step 3: Extracting comments")
             comments = self._extract_real_comments(result['html'], url)
+            
+            # Log initial extraction results
+            real_usernames = len([c for c in comments if not c.get('username', '').startswith('@user_')])
+            comments_with_likes = len([c for c in comments if c.get('likes', 0) > 0])
+            
+            self.logger.info("Initial extraction complete", {
+                'total_comments': len(comments),
+                'real_usernames': real_usernames,
+                'comments_with_likes': comments_with_likes
+            })
             
             # Step 4: Enrich comments with follower data (if we have real users)
             if comments and any(c.get('username', '').startswith('@') and 'user_' not in c.get('username', '') for c in comments):
-                print(f"Enriching {len(comments)} comments with follower data...")
+                self.logger.info(f"Step 4: Enriching {len(comments)} comments with follower data")
                 comments = self._enrich_with_followers(comments)
+            else:
+                self.logger.warning("Skipping follower enrichment - no real users found or not authenticated")
             
-            print(f"Successfully extracted {len(comments)} real comments")
+            # Final summary
+            final_real_usernames = len([c for c in comments if not c.get('username', '').startswith('@user_')])
+            final_comments_with_likes = len([c for c in comments if c.get('likes', 0) > 0])
+            final_comments_with_followers = len([c for c in comments if c.get('followers', 'N/A') != 'N/A'])
+            
+            self.logger.log_scraping_summary(
+                url, len(comments), final_real_usernames, 
+                final_comments_with_likes, final_comments_with_followers
+            )
             
             return {
                 'success': True,
@@ -59,6 +117,7 @@ class InstagramScraper:
             }
             
         except Exception as e:
+            self.logger.error("Critical error in scrape_comments", {'error': str(e)}, exc_info=True)
             return {
                 'success': False,
                 'error': f"Instagram scraper error: {str(e)}",
@@ -68,28 +127,86 @@ class InstagramScraper:
     def _get_page_with_embedded_data(self, url):
         """Get Instagram page with embedded JSON data"""
         try:
-            # Enhanced configuration for better data extraction
-            config = self.scrapfly.create_scrape_config(url, 'instagram', {
+            # Force authentication requirement
+            if not self.is_logged_in:
+                self.logger.warning("Not authenticated - this will likely result in 429 errors")
+                self.logger.info("Attempting to use credentials from config file")
+                
+                # Try to auto-login using credentials from config
+                try:
+                    from instagram_config_example import INSTAGRAM_CREDENTIALS
+                    if INSTAGRAM_CREDENTIALS['username'] != 'your_instagram_username':
+                        self.logger.info("Auto-login with config credentials")
+                        login_result = self.login(
+                            INSTAGRAM_CREDENTIALS['username'], 
+                            INSTAGRAM_CREDENTIALS['password']
+                        )
+                        if not login_result['success']:
+                            self.logger.error("Auto-login failed", {'error': login_result.get('error')})
+                except ImportError:
+                    self.logger.warning("No credentials config found - continuing without auth")
+            
+            # Simplified configuration to avoid timeouts
+            config_options = {
                 'render_js': True,
                 'wait_for_selector': 'article',
-                'timeout': 30000,
-                'js': self._get_improved_js_code()
-            })
+                'cost_budget': 55,  # Lower budget
+                'cache': False,
+                'retry': False,  # Disable retry
+                'timeout': 30000  # 30 seconds
+            }
+            
+            # Only add JS if we're not getting timeouts
+            if not hasattr(self, '_timeout_count') or self._timeout_count < 2:
+                config_options['js'] = self._get_simplified_js_code()
+            else:
+                self.logger.warning("Skipping JS execution due to previous timeouts")
+            
+            # Use authenticated headers if logged in
+            if self.is_logged_in:
+                auth_headers = self.auth.get_authenticated_headers()
+                config_options['additional_headers'] = auth_headers
+                config_options['session'] = 'instagram-authenticated-session'
+                self.logger.info("Using authenticated session for scraping")
+            else:
+                self.logger.warning("Proceeding without authentication - expect limited results")
+            
+            self.logger.log_request(url, headers=config_options.get('additional_headers'))
+            
+            config = self.scrapfly.create_scrape_config(url, 'instagram', config_options)
             
             result = self.scrapfly.scrape_with_retry(config)
             
             if result['success']:
+                self.logger.log_response(url, 200, len(result['data']))
                 return {
                     'success': True,
                     'html': result['data']
                 }
             else:
+                error = result.get('error', 'Unknown error')
+                self.logger.log_response(url, None, None, error)
+                
+                # Handle specific errors
+                if '429' in str(error):
+                    self.logger.log_rate_limit(url)
+                    if not self.is_logged_in:
+                        self.logger.error("429 error likely due to lack of authentication")
+                
+                # Track timeouts for future requests
+                if '504' in str(error) or 'TIMEOUT' in str(error):
+                    if not hasattr(self, '_timeout_count'):
+                        self._timeout_count = 0
+                    self._timeout_count += 1
+                    self.logger.warning(f"Timeout #{self._timeout_count} detected")
+                
                 return {
                     'success': False,
-                    'error': result.get('error', 'Unknown error')
+                    'error': error
                 }
                 
         except Exception as e:
+            self.logger.error("Exception in _get_page_with_embedded_data", {'error': str(e)}, exc_info=True)
             return {
                 'success': False,
                 'error': f"Error loading page: {str(e)}"
@@ -168,6 +285,24 @@ class InstagramScraper:
         return extractInstagramData();
         """
     
+    def _get_simplified_js_code(self):
+        """Simplified JavaScript to reduce timeout risk"""
+        return """
+        async function quickExtract() {
+            // Wait a bit for page load
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            // Try to scroll once to load some comments
+            window.scrollTo(0, document.body.scrollHeight / 2);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            // Return HTML without complex operations
+            return document.documentElement.outerHTML;
+        }
+        
+        return quickExtract();
+        """
+    
     def _extract_post_metadata(self, html):
         """Extract post metadata from HTML"""
         metadata = {}
@@ -223,24 +358,50 @@ class InstagramScraper:
         comments = []
         
         try:
+            self.logger.debug("Starting comment extraction with multiple strategies")
+            
             # Strategy 1: Extract from embedded JSON data
-            comments.extend(self._extract_from_embedded_json(html))
+            self.logger.log_extraction_attempt("Embedded JSON", url)
+            json_comments = self._extract_from_embedded_json(html)
+            comments.extend(json_comments)
+            self.logger.debug(f"Strategy 1 (JSON): Found {len(json_comments)} comments")
             
             # Strategy 2: Extract from HTML structure
             if len(comments) == 0:
-                comments.extend(self._extract_from_html_structure(html))
+                self.logger.log_extraction_attempt("HTML Structure", url)
+                html_comments = self._extract_from_html_structure(html)
+                comments.extend(html_comments)
+                self.logger.debug(f"Strategy 2 (HTML): Found {len(html_comments)} comments")
             
             # Strategy 3: Use ScrapFly's direct API approach
             if len(comments) == 0:
-                comments.extend(self._extract_with_direct_api(url))
+                self.logger.log_extraction_attempt("Direct API", url)
+                api_comments = self._extract_with_direct_api(url)
+                comments.extend(api_comments)
+                self.logger.debug(f"Strategy 3 (API): Found {len(api_comments)} comments")
             
             # Remove duplicates and limit results
+            self.logger.debug(f"Removing duplicates from {len(comments)} total comments")
             unique_comments = self._remove_duplicate_comments(comments)
+            self.logger.debug(f"After deduplication: {len(unique_comments)} unique comments")
             
-            return unique_comments[:self.limits['max_comments_per_video']]
+            final_comments = unique_comments[:self.limits['max_comments_per_video']]
+            
+            # Log individual comment details for debugging
+            for comment in final_comments[:5]:  # Log first 5 for debugging
+                self.logger.log_comment_data(
+                    comment.get('comment_id', 'N/A'),
+                    comment.get('username', 'N/A'),
+                    len(comment.get('text', '')),
+                    comment.get('likes', 0),
+                    comment.get('followers', 'N/A') != 'N/A'
+                )
+            
+            self.logger.info(f"Comment extraction complete: {len(final_comments)} comments extracted")
+            return final_comments
             
         except Exception as e:
-            print(f"Error extracting comments: {str(e)}")
+            self.logger.error("Critical error in _extract_real_comments", {'error': str(e)}, exc_info=True)
             return []
     
     def _extract_from_embedded_json(self, html):
@@ -414,18 +575,28 @@ class InstagramScraper:
             # Use a different approach with specific headers for API-like access
             from scrapfly import ScrapeConfig
             
+            # Prepare headers
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+            
+            # Add authentication if available
+            if self.is_logged_in:
+                auth_headers = self.auth.get_authenticated_headers()
+                headers.update(auth_headers)
+                print("Using authenticated headers for direct API access")
+            
             config = ScrapeConfig(
                 url=url,
-                headers={
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
+                headers=headers,
                 asp=True,
                 render_js=False,  # Try without JS first
                 proxy_pool='public_residential_pool',
-                country='US'
+                country='US',
+                session='instagram-authenticated-session' if self.is_logged_in else None
             )
             
             result = self.scrapfly.client.scrape(config)
@@ -554,60 +725,160 @@ class InstagramScraper:
         return comments
     
     def _extract_from_json_fallback(self, html):
-        """Fallback JSON extraction with better username parsing"""
+        """Fallback JSON extraction with better username and likes parsing"""
         comments = []
         
         try:
-            # Look for any JSON that might contain comments
-            json_patterns = [
+            # Enhanced patterns to capture comment data including likes
+            comment_patterns = [
+                # Pattern for full comment objects with likes
+                r'\{"text":"([^"]+)"[^}]*"username":"([^"]+)"[^}]*"like_count":(\d+)[^}]*\}',
+                r'\{"username":"([^"]+)"[^}]*"text":"([^"]+)"[^}]*"like_count":(\d+)[^}]*\}',
+                
+                # Pattern for edge-like structures (Instagram GraphQL)
+                r'"edge_liked_by":\s*\{\s*"count":\s*(\d+)\s*\}[^}]*"text":\s*"([^"]+)"[^}]*"username":\s*"([^"]+)"',
+                r'"text":\s*"([^"]+)"[^}]*"edge_liked_by":\s*\{\s*"count":\s*(\d+)\s*\}[^}]*"username":\s*"([^"]+)"',
+                
+                # Simpler patterns for basic comment data
                 r'\{"text":"([^"]+)"[^}]*"username":"([^"]+)"[^}]*\}',
                 r'\{"username":"([^"]+)"[^}]*"text":"([^"]+)"[^}]*\}',
-                r'"text"\s*:\s*"([^"]+)"',  # Just text for now
             ]
             
-            # Extract text-username pairs
-            comment_data = []
+            extracted_comments = []
             
-            for pattern in json_patterns:
-                matches = re.findall(pattern, html)
+            for pattern in comment_patterns:
+                matches = re.findall(pattern, html, re.DOTALL)
                 for match in matches:
-                    if len(match) == 2:
-                        text, username = match
+                    if len(match) >= 2:  # At least text and username
+                        
+                        # Parse based on pattern structure
+                        if len(match) == 3 and match[2].isdigit():  # Has likes
+                            if 'edge_liked_by' in pattern:
+                                # GraphQL pattern: likes, text, username
+                                likes, text, username = match
+                            else:
+                                # Standard pattern: text, username, likes
+                                text, username, likes = match
+                            likes = int(likes)
+                        elif len(match) == 3 and match[0].isdigit():  # Different order with likes
+                            # Pattern: username, text, likes
+                            username, text, likes = match
+                            likes = int(likes)
+                        else:
+                            # No likes data
+                            text, username = match[0], match[1]
+                            likes = 0
+                        
                         if len(text) > 10 and len(text) < 500:
-                            comment_data.append({
+                            extracted_comments.append({
                                 'text': text,
-                                'username': username
+                                'username': username,
+                                'likes': likes
                             })
-            
-            # Also look for standalone text that might be comments
-            text_matches = re.findall(r'"text"\s*:\s*"([^"]{20,300})"', html)
-            username_matches = re.findall(r'"username"\s*:\s*"([^"]+)"', html)
-            
-            # Try to pair them up
-            for i, text in enumerate(text_matches[:20]):
-                username = username_matches[i] if i < len(username_matches) else f'user_{i+1}'
                 
-                if (len(text) > 10 and 
-                    not any(skip in text.lower() for skip in ['loading', 'follow', 'profile', 'instagram'])):
+                if extracted_comments:
+                    break  # Use first successful pattern
+            
+            # Fixed approach: extract comment objects properly
+            if not extracted_comments:
+                self.logger.debug("Using proper Instagram comment node extraction")
+                
+                # Look for Instagram's comment node structure with proper text-username pairing
+                comment_node_patterns = [
+                    # Instagram GraphQL comment node structure
+                    r'"node":\s*\{[^}]*?"text":\s*"([^"]+)"[^}]*?"owner":\s*\{[^}]*?"username":\s*"([^"]+)"[^}]*?\}[^}]*?(?:"edge_liked_by":\s*\{\s*"count":\s*(\d+)\s*\})?',
                     
-                    comment = {
-                        'comment_id': len(comments) + 1,
-                        'nickname': username,
-                        'username': f'@{username}',
-                        'user_url': f'https://www.instagram.com/{username}/',
-                        'text': text,
-                        'time': 'N/A',
-                        'likes': 0,
-                        'profile_pic': '',
-                        'followers': 'N/A',
-                        'is_reply': False,
-                        'replied_to': '',
-                        'num_replies': 0
-                    }
-                    comments.append(comment)
+                    # Alternative comment structure  
+                    r'\{[^}]*?"text":\s*"([^"]+)"[^}]*?"owner":\s*\{[^}]*?"username":\s*"([^"]+)"[^}]*?\}[^}]*?(?:"like_count":\s*(\d+))?',
+                    
+                    # Basic comment object with text and username together
+                    r'\{[^{}]*?"text":\s*"([^"]+)"[^{}]*?"username":\s*"([^"]+)"[^{}]*?(?:"like_count":\s*(\d+))?[^{}]*?\}'
+                ]
+                
+                for pattern in comment_node_patterns:
+                    matches = re.findall(pattern, html, re.DOTALL)
+                    
+                    if matches:
+                        self.logger.debug(f"Found {len(matches)} comments with pattern")
+                        
+                        for match in matches:
+                            if len(match) >= 2:  # At least text and username
+                                text = match[0]
+                                username = match[1]
+                                likes = int(match[2]) if len(match) > 2 and match[2] and match[2].isdigit() else 0
+                                
+                                if (len(text) > 3 and len(text) < 500 and 
+                                    not any(skip in text.lower() for skip in ['loading', 'follow', 'profile', 'instagram', 'see original'])):
+                                    
+                                    extracted_comments.append({
+                                        'text': text,
+                                        'username': username,
+                                        'likes': likes
+                                    })
+                                    
+                                    self.logger.debug(f"Extracted: @{username} - '{text[:40]}...' ({likes} likes)")
+                        
+                        if extracted_comments:
+                            break
+                
+                # Last resort: separate extraction but with better validation
+                if not extracted_comments:
+                    self.logger.debug("Using separate text/username extraction with validation")
+                    
+                    text_matches = re.findall(r'"text"\s*:\s*"([^"]{10,300})"', html)
+                    
+                    # For each text, try to find the associated username nearby
+                    for text in text_matches[:20]:
+                        if not any(skip in text.lower() for skip in ['loading', 'follow', 'profile', 'instagram']):
+                            
+                            # Find text position and look for username context
+                            text_pos = html.find(f'"{text}"')
+                            if text_pos > -1:
+                                # Look in a reasonable context around the text
+                                context_start = max(0, text_pos - 500)
+                                context_end = min(len(html), text_pos + 500)
+                                context = html[context_start:context_end]
+                                
+                                # Find username in this context
+                                username_match = re.search(r'"username":\s*"([^"]+)"', context)
+                                likes_match = re.search(r'"(?:like_count|count)":\s*(\d+)', context)
+                                
+                                if username_match:
+                                    username = username_match.group(1)
+                                    likes = int(likes_match.group(1)) if likes_match else 0
+                                    
+                                    extracted_comments.append({
+                                        'text': text,
+                                        'username': username,
+                                        'likes': likes
+                                    })
+                                    
+                                    self.logger.debug(f"Context match: @{username} - '{text[:30]}...' ({likes} likes)")
+                                    
+                                    if len(extracted_comments) >= 20:
+                                        break
+            
+            # Convert to final comment format
+            for i, comment_data in enumerate(extracted_comments[:20]):
+                comment = {
+                    'comment_id': len(comments) + 1,
+                    'nickname': comment_data['username'],
+                    'username': f'@{comment_data["username"]}',
+                    'user_url': f'https://www.instagram.com/{comment_data["username"]}/',
+                    'text': comment_data['text'],
+                    'time': 'N/A',
+                    'likes': comment_data.get('likes', 0),
+                    'profile_pic': '',
+                    'followers': 'N/A',
+                    'is_reply': False,
+                    'replied_to': '',
+                    'num_replies': 0
+                }
+                comments.append(comment)
             
             if len(comments) > 0:
-                print(f"Extracted {len(comments)} comments from JSON fallback")
+                likes_found = sum(1 for c in comments if c['likes'] > 0)
+                print(f"Extracted {len(comments)} comments from JSON fallback ({likes_found} with like data)")
             
         except Exception as e:
             print(f"Error in JSON fallback: {str(e)}")
@@ -645,7 +916,10 @@ class InstagramScraper:
     def _enrich_with_followers(self, comments):
         """Enrich comments with follower data for real users"""
         if not comments:
+            self.logger.debug("No comments to enrich with follower data")
             return comments
+        
+        self.logger.info(f"Starting follower enrichment for {len(comments)} comments")
         
         # Get unique users to avoid duplicate API calls
         unique_users = {}
@@ -656,22 +930,46 @@ class InstagramScraper:
             if username in unique_users:
                 unique_users[username].append(comment)
         
-        print(f"Getting follower data for {len(unique_users)} unique users...")
+        self.logger.info(f"Found {len(unique_users)} unique users for follower enrichment")
+        self.logger.debug(f"Users to process: {list(unique_users.keys())[:10]}")  # Log first 10
+        
+        successful_enrichments = 0
+        failed_enrichments = 0
         
         # Process each unique user
-        for username, user_comments in unique_users.items():
+        for i, (username, user_comments) in enumerate(unique_users.items()):
             try:
+                self.logger.debug(f"Processing user {i+1}/{len(unique_users)}: @{username}")
+                
                 followers = self._get_user_followers(username)
+                
+                if followers != 'N/A':
+                    successful_enrichments += 1
+                    self.logger.debug(f"Successfully got followers for @{username}: {followers}")
+                else:
+                    failed_enrichments += 1
+                    self.logger.warning(f"Failed to get followers for @{username}")
+                
                 for comment in user_comments:
                     comment['followers'] = followers
                 
                 # Small delay to avoid rate limiting
-                time.sleep(random.uniform(1, 2))
+                delay = random.uniform(1, 2)
+                self.logger.debug(f"Rate limit delay: {delay:.1f}s")
+                time.sleep(delay)
                 
             except Exception as e:
-                print(f"Error getting followers for @{username}: {str(e)}")
+                failed_enrichments += 1
+                self.logger.error(f"Error getting followers for @{username}", {'error': str(e)})
                 for comment in user_comments:
                     comment['followers'] = 'N/A'
+        
+        self.logger.info(f"Follower enrichment complete", {
+            'total_users': len(unique_users),
+            'successful': successful_enrichments,
+            'failed': failed_enrichments,
+            'success_rate': f"{(successful_enrichments/len(unique_users)*100):.1f}%" if unique_users else "0%"
+        })
         
         return comments
     
@@ -679,17 +977,32 @@ class InstagramScraper:
         """Get follower count for a specific user"""
         try:
             user_url = f"https://www.instagram.com/{username}/"
+            self.logger.debug(f"Fetching follower data for @{username}")
             
             # Use simplified config for profile pages
-            config = self.scrapfly.create_scrape_config(user_url, 'instagram', {
+            config_options = {
                 'render_js': False,
-                'timeout': 15000
-            })
+                'retry': False,  # Disable retry to allow timeout
+                'timeout': 30000  # 30 seconds minimum for ASP
+            }
             
+            # Use authentication if available
+            if self.is_logged_in:
+                auth_headers = self.auth.get_authenticated_headers()
+                config_options['additional_headers'] = auth_headers
+                config_options['session'] = 'instagram-authenticated-session'
+                self.logger.debug(f"Using authenticated session for @{username}")
+            else:
+                self.logger.warning(f"No authentication available for @{username} - may get 429 error")
+            
+            config = self.scrapfly.create_scrape_config(user_url, 'instagram', config_options)
+            
+            self.logger.log_request(user_url, headers=config_options.get('additional_headers'))
             result = self.scrapfly.scrape_with_retry(config, max_retries=2)
             
             if result['success']:
                 html = result['data']
+                self.logger.log_response(user_url, 200, len(html))
                 
                 # Look for follower count patterns
                 patterns = [
@@ -699,25 +1012,39 @@ class InstagramScraper:
                     r'(\d+(?:\.\d+)?[KMB]?)\s*followers'
                 ]
                 
-                for pattern in patterns:
+                for i, pattern in enumerate(patterns):
                     match = re.search(pattern, html, re.IGNORECASE)
                     if match:
                         count_str = match.group(1).replace(',', '')
+                        self.logger.debug(f"Found follower data for @{username} using pattern {i+1}: {count_str}")
                         
                         # Handle abbreviated numbers (K, M, B)
                         if 'K' in count_str.upper():
-                            return f"{float(count_str.replace('K', '').replace('k', '')) * 1000:.0f}"
+                            result_count = f"{float(count_str.replace('K', '').replace('k', '')) * 1000:.0f}"
                         elif 'M' in count_str.upper():
-                            return f"{float(count_str.replace('M', '').replace('m', '')) * 1000000:.0f}"
+                            result_count = f"{float(count_str.replace('M', '').replace('m', '')) * 1000000:.0f}"
                         elif 'B' in count_str.upper():
-                            return f"{float(count_str.replace('B', '').replace('b', '')) * 1000000000:.0f}"
+                            result_count = f"{float(count_str.replace('B', '').replace('b', '')) * 1000000000:.0f}"
                         else:
-                            return self._format_number(int(float(count_str)))
+                            result_count = self._format_number(int(float(count_str)))
+                        
+                        self.logger.debug(f"Parsed follower count for @{username}: {result_count}")
+                        return result_count
+                
+                self.logger.warning(f"No follower pattern matched for @{username}")
+                return 'N/A'
+            else:
+                error = result.get('error', 'Unknown error')
+                self.logger.log_response(user_url, None, None, error)
+                
+                if '429' in str(error):
+                    self.logger.log_rate_limit(user_url)
+                    self.logger.warning(f"Rate limited while fetching @{username} - authentication may be needed")
                 
                 return 'N/A'
             
         except Exception as e:
-            print(f"Error getting followers for {username}: {str(e)}")
+            self.logger.error(f"Exception getting followers for @{username}", {'error': str(e)}, exc_info=True)
             return 'N/A'
         
         return 'N/A'

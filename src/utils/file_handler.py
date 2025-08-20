@@ -70,7 +70,7 @@ class FileHandler:
         # Añadir headers de metadatos
         for col_num, header in enumerate(metadata_headers, 1):
             cell = ws.cell(row=1, column=col_num)
-            cell.value = header
+            cell.value = self._safe_unicode_value(header)
             cell.font = header_font
             cell.fill = header_fill_meta
             cell.alignment = center_alignment
@@ -80,7 +80,7 @@ class FileHandler:
         start_col = 17
         for col_num, header in enumerate(comment_headers):
             cell = ws.cell(row=1, column=start_col + col_num)
-            cell.value = header
+            cell.value = self._safe_unicode_value(header)
             cell.font = header_font
             cell.fill = header_fill_comments
             cell.alignment = center_alignment
@@ -112,7 +112,9 @@ class FileHandler:
             ]
             
             for col_num, value in enumerate(metadata_values, 1):
-                ws.cell(row=current_row, column=col_num).value = value
+                # Ensure proper Unicode handling for emojis and special characters
+                cell = ws.cell(row=current_row, column=col_num)
+                cell.value = self._safe_unicode_value(value)
             
             # Añadir comentarios
             for comment_idx, comment in enumerate(comments):
@@ -132,7 +134,9 @@ class FileHandler:
                 ]
                 
                 for col_num, value in enumerate(comment_values):
-                    ws.cell(row=current_row, column=start_col + col_num).value = value
+                    # Ensure proper Unicode handling for emojis and special characters
+                    cell = ws.cell(row=current_row, column=start_col + col_num)
+                    cell.value = self._safe_unicode_value(value)
                 
                 if comment_idx < len(comments) - 1:  # No incrementar en el último comentario
                     current_row += 1
@@ -292,3 +296,44 @@ class FileHandler:
                 f.write(f"  Likes del video: {metadata.get('likes', 'N/A')}\n")
         
         return filepath
+    
+    def _safe_unicode_value(self, value):
+        """
+        Safely handle Unicode values for Excel export including emojis and accented characters
+        
+        Args:
+            value: The value to process
+            
+        Returns:
+            str: Properly formatted Unicode string safe for Excel
+        """
+        if value is None:
+            return ""
+        
+        # Convert to string if not already
+        if not isinstance(value, str):
+            value = str(value)
+        
+        # Handle empty strings
+        if not value:
+            return ""
+        
+        try:
+            # Ensure the string is properly encoded as UTF-8
+            # This preserves emojis and accented characters like á, é, í, ó, ú, ñ
+            if isinstance(value, bytes):
+                value = value.decode('utf-8', errors='replace')
+            
+            # Excel handles Unicode natively with openpyxl, so we just return the string
+            # This preserves emojis (🔥, 👏, 😍, etc.) and Spanish accents (á, é, í, ó, ú, ñ, ü)
+            return value
+            
+        except (UnicodeDecodeError, UnicodeEncodeError) as e:
+            # If there's any Unicode error, try to clean the string
+            try:
+                # Replace problematic characters but keep the basic text
+                cleaned = value.encode('utf-8', errors='replace').decode('utf-8')
+                return cleaned
+            except:
+                # Last resort: return a safe version
+                return str(value).encode('ascii', errors='replace').decode('ascii')

@@ -52,8 +52,8 @@ class ScrapFlyConfig:
                 'cost_budget': 55,                        # Presupuesto adecuado para ASP
                 'proxy_pool': 'public_residential_pool',  # Proxies residenciales obligatorios
                 'country': 'US',                          # País recomendado
-                'timeout': 60000,                         # 60 segundos para ASP operations
-                'retry': True,                            # Retry automático habilitado
+                'timeout': 45000,                         # 45 segundos timeout
+                'retry': False,                           # Disable retry to allow timeout
                 'render_js': True,
                 'wait_for_selector': 'article, main, [role="main"]',
                 'auto_scroll': True,
@@ -210,17 +210,31 @@ class ScrapFlyConfig:
                 'cache': False                                  # No usar caché para datos frescos
             })
         
-        # Solo añadir timeout si no hay render_js o retry habilitado
-        if not platform_config.get('render_js', False) and not config_params.get('retry', False):
-            config_params['timeout'] = platform_config.get('wait_for_timeout', 10000)
-        
-        # Añadir selector de espera si existe
-        if 'wait_for_selector' in platform_config:
-            config_params['wait_for_selector'] = platform_config['wait_for_selector']
-        
-        # Aplicar opciones personalizadas
+        # Aplicar opciones personalizadas ANTES de manejar timeout/retry conflicts
         if custom_options:
             config_params.update(custom_options)
+        
+        # Fix timeout/retry conflicts - ScrapFly doesn't allow custom timeout when retry is enabled
+        has_retry = config_params.get('retry', False) or (custom_options and custom_options.get('retry', False))
+        has_timeout = 'timeout' in config_params or (custom_options and 'timeout' in custom_options)
+        
+        # Only remove timeout if retry is explicitly enabled
+        if has_retry and has_timeout:
+            config_params.pop('timeout', None)
+            if custom_options and 'timeout' in custom_options:
+                custom_options.pop('timeout', None)
+            print("INFO: Removed timeout setting due to retry being enabled")
+        elif not has_retry and not has_timeout:
+            # Add a reasonable default timeout when no retry and no timeout specified
+            config_params['timeout'] = platform_config.get('timeout', 30000)
+        
+        # Add wait selector only if render_js is enabled
+        if config_params.get('render_js', False) and 'wait_for_selector' in platform_config:
+            config_params['wait_for_selector'] = platform_config['wait_for_selector']
+        elif 'wait_for_selector' in config_params and not config_params.get('render_js', False):
+            # Remove wait_for_selector if render_js is disabled
+            config_params.pop('wait_for_selector', None)
+            print("WARNING: Removed wait_for_selector - only works with render_js enabled")
             
         return ScrapeConfig(**config_params)
     
