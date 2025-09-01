@@ -19,7 +19,7 @@ class FileHandler:
     
     def _ensure_directories(self):
         """Crea los directorios necesarios si no existen"""
-        platforms = ['tiktok', 'instagram', 'facebook']
+        platforms = ['instagram']
         
         for platform in platforms:
             platform_dir = os.path.join(self.scrape_dir, platform)
@@ -31,7 +31,7 @@ class FileHandler:
         
         Args:
             results (list): Lista de resultados de scraping
-            platform (str): Plataforma (tiktok, instagram, facebook)
+            platform (str): Plataforma (instagram)
             filename (str): Nombre base del archivo
             
         Returns:
@@ -158,7 +158,7 @@ class FileHandler:
         
         Args:
             results (list): Lista de resultados de scraping
-            platform (str): Plataforma (tiktok, instagram, facebook)
+            platform (str): Plataforma (instagram)
             filename (str): Nombre base del archivo
             
         Returns:

@@ -8,6 +8,8 @@ import re
 import json
 import time
 import random
+import html
+import codecs
 from bs4 import BeautifulSoup
 from datetime import datetime
 from utils.scrapfly_config import ScrapFlyConfig
@@ -31,6 +33,117 @@ class InstagramScraper:
                 self.logger.info("Using existing Instagram session")
             else:
                 self.logger.warning("Session loaded but not authenticated")
+    
+    def _decode_unicode_text(self, text):
+        """
+        Properly decode Unicode text including Spanish accents and emojis
+        
+        Args:
+            text (str): Text that may contain Unicode escapes or encoded characters
+            
+        Returns:
+            str: Properly decoded Unicode text
+        """
+        if not text or not isinstance(text, str):
+            return text
+        
+        try:
+            # Step 1: Handle HTML entities (like &amp; &lt; &gt; etc.)
+            text = html.unescape(text)
+            
+            # Step 2: Handle double-encoded Unicode escapes like \\u00e1
+            if '\\\\u' in text:
+                text = text.replace('\\\\u', '\\u')
+            
+            # Step 3: Handle Unicode escapes with proper emoji support
+            if '\\u' in text:
+                try:
+                    # Use json.loads for proper Unicode handling including emoji surrogates
+                    import json
+                    # Wrap in quotes to make it a valid JSON string
+                    json_text = f'"{text}"'
+                    decoded = json.loads(json_text)
+                    text = decoded
+                except (json.JSONDecodeError, ValueError):
+                    try:
+                        # Fallback to bytes decode method
+                        text = text.encode('utf-8').decode('unicode_escape')
+                    except UnicodeDecodeError:
+                        try:
+                            # Final fallback with codecs
+                            text = codecs.decode(text, 'unicode_escape')
+                        except:
+                            # If all fails, just remove the escape sequences
+                            import re
+                            text = re.sub(r'\\u[0-9a-fA-F]{4}', '', text)
+            
+            # Step 4: Ensure proper UTF-8 encoding
+            if isinstance(text, bytes):
+                text = text.decode('utf-8', errors='replace')
+            
+            # Step 5: Normalize the text to handle any remaining encoding issues
+            text = text.encode('utf-8', errors='replace').decode('utf-8')
+            
+            return text
+            
+        except Exception as e:
+            self.logger.debug(f"Unicode decoding error for text: {str(e)}")
+            # Return original text if decoding fails
+            return str(text)
+    
+    def _clean_extracted_text(self, text):
+        """
+        Clean and normalize extracted text while preserving Unicode characters
+        
+        Args:
+            text (str): Raw extracted text
+            
+        Returns:
+            str: Cleaned text with proper Unicode handling
+        """
+        if not text:
+            return ""
+        
+        # First decode Unicode properly
+        text = self._decode_unicode_text(text)
+        
+        # Clean common extraction artifacts while preserving Spanish characters and emojis
+        text = text.strip()
+        
+        # Remove multiple whitespaces but keep structure
+        text = re.sub(r'\s+', ' ', text)
+        
+        # Remove common Instagram UI text that might get extracted
+        ui_patterns = [
+            r'^(likes?|me gusta|comentarios?|comments?|compartir|share|seguir|follow)\s*',
+            r'\s*(likes?|me gusta|comentarios?|comments?|compartir|share|seguir|follow)$'
+        ]
+        
+        for pattern in ui_patterns:
+            text = re.sub(pattern, '', text, flags=re.IGNORECASE)
+        
+        return text.strip()
+    
+    def _normalize_username(self, username):
+        """
+        Normalize username while preserving Unicode characters
+        
+        Args:
+            username (str): Raw username
+            
+        Returns:
+            str: Normalized username
+        """
+        if not username:
+            return ""
+        
+        # Decode Unicode first
+        username = self._decode_unicode_text(username)
+        
+        # Clean up common artifacts
+        username = username.strip().replace('@', '')
+        
+        return username
     
     def login(self, username, password):
         """Login to Instagram for authenticated scraping"""
@@ -318,12 +431,16 @@ class InstagramScraper:
                     if isinstance(data, dict) and 'author' in data:
                         if 'author' in data:
                             author = data['author']
-                            metadata['publisher_nickname'] = author.get('name', '')
-                            metadata['publisher_username'] = '@' + author.get('alternateName', '').replace('@', '')
+                            raw_nickname = author.get('name', '')
+                            raw_username = author.get('alternateName', '').replace('@', '')
+                            
+                            metadata['publisher_nickname'] = self._clean_extracted_text(raw_nickname)
+                            metadata['publisher_username'] = '@' + self._normalize_username(raw_username)
                             metadata['publisher_url'] = author.get('url', '')
                         
                         if 'caption' in data:
-                            metadata['description'] = data['caption']
+                            raw_caption = data['caption']
+                            metadata['description'] = self._clean_extracted_text(raw_caption)
                         
                         if 'interactionStatistic' in data:
                             for stat in data['interactionStatistic']:
@@ -342,11 +459,13 @@ class InstagramScraper:
                     content = og_title.get('content', '')
                     username_match = re.search(r'@(\w+)', content)
                     if username_match:
-                        metadata['publisher_username'] = '@' + username_match.group(1)
+                        raw_username = username_match.group(1)
+                        metadata['publisher_username'] = '@' + self._normalize_username(raw_username)
                 
                 og_description = soup.find('meta', property='og:description')
                 if og_description:
-                    metadata['description'] = og_description.get('content', '')
+                    raw_description = og_description.get('content', '')
+                    metadata['description'] = self._clean_extracted_text(raw_description)
             
         except Exception as e:
             print(f"Error extracting metadata: {str(e)}")
@@ -464,12 +583,18 @@ class InstagramScraper:
                                 owner = node.get('owner', {})
                                 username = owner.get('username', f'user_{i+1}')
                                 
+                                # Clean text and username with Unicode support
+                                raw_text = node.get('text', '')
+                                clean_text = self._clean_extracted_text(raw_text)
+                                clean_username = self._normalize_username(username)
+                                clean_nickname = self._clean_extracted_text(owner.get('full_name', username))
+                                
                                 comment = {
                                     'comment_id': i + 1,
-                                    'nickname': owner.get('full_name', username),
-                                    'username': f'@{username}',
-                                    'user_url': f'https://www.instagram.com/{username}/',
-                                    'text': node.get('text', ''),
+                                    'nickname': clean_nickname,
+                                    'username': f'@{clean_username}',
+                                    'user_url': f'https://www.instagram.com/{clean_username}/',
+                                    'text': clean_text,
                                     'time': self._format_timestamp(node.get('created_at')),
                                     'likes': node.get('edge_liked_by', {}).get('count', 0),
                                     'profile_pic': owner.get('profile_pic_url', ''),
@@ -489,12 +614,18 @@ class InstagramScraper:
                         owner = node.get('owner', {})
                         username = owner.get('username', f'user_{i+1}')
                         
+                        # Clean text and username with Unicode support
+                        raw_text = node.get('text', '')
+                        clean_text = self._clean_extracted_text(raw_text)
+                        clean_username = self._normalize_username(username)
+                        clean_nickname = self._clean_extracted_text(owner.get('full_name', username))
+                        
                         comment = {
                             'comment_id': i + 1,
-                            'nickname': owner.get('full_name', username),
-                            'username': f'@{username}',
-                            'user_url': f'https://www.instagram.com/{username}/',
-                            'text': node.get('text', ''),
+                            'nickname': clean_nickname,
+                            'username': f'@{clean_username}',
+                            'user_url': f'https://www.instagram.com/{clean_username}/',
+                            'text': clean_text,
                             'time': self._format_timestamp(node.get('created_at')),
                             'likes': node.get('edge_liked_by', {}).get('count', 0),
                             'profile_pic': owner.get('profile_pic_url', ''),
@@ -536,7 +667,11 @@ class InstagramScraper:
                         
                         # Get comment text (excluding username)
                         full_text = element.get_text(strip=True)
-                        comment_text = full_text.replace(username, '').strip()
+                        raw_comment_text = full_text.replace(username, '').strip()
+                        
+                        # Clean and decode the text properly
+                        comment_text = self._clean_extracted_text(raw_comment_text)
+                        clean_username = self._normalize_username(username)
                         
                         # Skip if it doesn't look like a real comment
                         if (len(comment_text) > 3 and 
@@ -544,8 +679,8 @@ class InstagramScraper:
                             
                             comment = {
                                 'comment_id': len(comments) + 1,
-                                'nickname': username,
-                                'username': f'@{username}',
+                                'nickname': clean_username,
+                                'username': f'@{clean_username}',
                                 'user_url': f'https://www.instagram.com{user_link.get("href", "")}',
                                 'text': comment_text,
                                 'time': 'N/A',
@@ -687,7 +822,11 @@ class InstagramScraper:
                     surrounding_text = parent.get_text(strip=True) if hasattr(parent, 'get_text') else str(elem)
                     
                     # Clean up the text to extract potential comment
-                    comment_text = surrounding_text.replace(username, '').strip()
+                    raw_comment_text = surrounding_text.replace(username, '').strip()
+                    
+                    # Apply Unicode cleaning
+                    comment_text = self._clean_extracted_text(raw_comment_text)
+                    clean_username = self._normalize_username(username)
                     
                     # Validate if this looks like a comment
                     if (len(comment_text) > 10 and 
@@ -696,9 +835,9 @@ class InstagramScraper:
                         
                         comment = {
                             'comment_id': len(comments) + 1,
-                            'nickname': username,
-                            'username': f'@{username}',
-                            'user_url': f'https://www.instagram.com/{username}/',
+                            'nickname': clean_username,
+                            'username': f'@{clean_username}',
+                            'user_url': f'https://www.instagram.com/{clean_username}/',
                             'text': comment_text,
                             'time': 'N/A',
                             'likes': 0,
@@ -770,9 +909,13 @@ class InstagramScraper:
                             likes = 0
                         
                         if len(text) > 10 and len(text) < 500:
+                            # Apply Unicode cleaning to extracted text and username
+                            clean_text = self._clean_extracted_text(text)
+                            clean_username = self._normalize_username(username)
+                            
                             extracted_comments.append({
-                                'text': text,
-                                'username': username,
+                                'text': clean_text,
+                                'username': clean_username,
                                 'likes': likes
                             })
                 
@@ -810,13 +953,17 @@ class InstagramScraper:
                                 if (len(text) > 3 and len(text) < 500 and 
                                     not any(skip in text.lower() for skip in ['loading', 'follow', 'profile', 'instagram', 'see original'])):
                                     
+                                    # Apply Unicode cleaning
+                                    clean_text = self._clean_extracted_text(text)
+                                    clean_username = self._normalize_username(username)
+                                    
                                     extracted_comments.append({
-                                        'text': text,
-                                        'username': username,
+                                        'text': clean_text,
+                                        'username': clean_username,
                                         'likes': likes
                                     })
                                     
-                                    self.logger.debug(f"Extracted: @{username} - '{text[:40]}...' ({likes} likes)")
+                                    self.logger.debug(f"Extracted: @{clean_username} - '{clean_text[:40]}...' ({likes} likes)")
                         
                         if extracted_comments:
                             break
@@ -844,16 +991,20 @@ class InstagramScraper:
                                 likes_match = re.search(r'"(?:like_count|count)":\s*(\d+)', context)
                                 
                                 if username_match:
-                                    username = username_match.group(1)
+                                    raw_username = username_match.group(1)
                                     likes = int(likes_match.group(1)) if likes_match else 0
                                     
+                                    # Apply Unicode cleaning
+                                    clean_text = self._clean_extracted_text(text)
+                                    clean_username = self._normalize_username(raw_username)
+                                    
                                     extracted_comments.append({
-                                        'text': text,
-                                        'username': username,
+                                        'text': clean_text,
+                                        'username': clean_username,
                                         'likes': likes
                                     })
                                     
-                                    self.logger.debug(f"Context match: @{username} - '{text[:30]}...' ({likes} likes)")
+                                    self.logger.debug(f"Context match: @{clean_username} - '{clean_text[:30]}...' ({likes} likes)")
                                     
                                     if len(extracted_comments) >= 20:
                                         break

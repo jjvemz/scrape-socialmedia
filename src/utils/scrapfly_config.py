@@ -36,16 +36,6 @@ class ScrapFlyConfig:
         
         # Configuración específica por plataforma
         self.platform_configs = {
-            'tiktok': {
-                'render_js': True,
-                'wait_for_selector': 'div[data-e2e="comment-list"]',
-                'auto_scroll': True,
-                'scroll_pause_time': 2,
-                'additional_headers': {
-                    'Referer': 'https://www.tiktok.com/',
-                    'Origin': 'https://www.tiktok.com'
-                }
-            },
             'instagram': {
                 # ✅ Configuración optimizada según investigación ScrapFly 2025
                 'asp': True,                              # CRÍTICO: Anti-Scraping Protection
@@ -73,32 +63,6 @@ class ScrapFlyConfig:
                     'Sec-Fetch-Dest': 'empty',
                     'Sec-Fetch-Mode': 'cors',
                     'Sec-Fetch-Site': 'same-origin'
-                }
-            },
-            'facebook': {
-                'asp': True,                              # Enable Anti-Scraping Protection for Facebook
-                'cost_budget': 120,                       # Higher budget for Facebook's anti-bot measures
-                'proxy_pool': 'public_residential_pool',  # Use residential proxies
-                'country': 'US',                          # US-based proxies
-                'render_js': True,
-                'wait_for_selector': 'body',              # More basic selector
-                'auto_scroll': True,
-                'scroll_pause_time': 2,
-                'additional_headers': {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'Accept-Encoding': 'gzip, deflate, br',
-                    'Referer': 'https://www.facebook.com/',
-                    'Sec-Fetch-Dest': 'document',
-                    'Sec-Fetch-Mode': 'navigate',
-                    'Sec-Fetch-Site': 'same-origin',
-                    'Cache-Control': 'no-cache',
-                    'Pragma': 'no-cache',
-                    'Upgrade-Insecure-Requests': '1',
-                    'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-                    'Sec-Ch-Ua-Mobile': '?0',
-                    'Sec-Ch-Ua-Platform': '"Windows"'
                 }
             }
         }
@@ -155,7 +119,7 @@ class ScrapFlyConfig:
         
         Args:
             url (str): URL a scrapear
-            platform (str): Plataforma ('tiktok', 'instagram', 'facebook', 'general')
+            platform (str): Plataforma ('instagram', 'general')
             custom_options (dict): Opciones personalizadas adicionales
             
         Returns:
@@ -193,18 +157,6 @@ class ScrapFlyConfig:
             config_params.update({
                 'asp': True,                                    # CRÍTICO para Instagram
                 'cost_budget': platform_config.get('cost_budget', 80),  # Presupuesto suficiente para ASP
-                'proxy_pool': 'public_residential_pool',        # Proxies residenciales
-                'session': session_id,                          # Manejo de sesión
-                'cache': False                                  # No usar caché para datos frescos
-            })
-        elif platform == 'facebook':
-            # Generar session ID único para Facebook
-            session_id = f"facebook-session-{int(time.time())}-{random.randint(1000, 9999)}"
-            
-            # Configuración optimizada para Facebook con ASP
-            config_params.update({
-                'asp': True,                                    # CRÍTICO para Facebook login bypass
-                'cost_budget': platform_config.get('cost_budget', 120),  # Higher budget for Facebook
                 'proxy_pool': 'public_residential_pool',        # Proxies residenciales
                 'session': session_id,                          # Manejo de sesión
                 'cache': False                                  # No usar caché para datos frescos
@@ -359,23 +311,11 @@ class ScrapFlyConfig:
             dict: Límites y configuraciones recomendadas
         """
         limits = {
-            'tiktok': {
-                'requests_per_minute': 20,
-                'delay_between_requests': 3,
-                'max_comments_per_video': 1000,
-                'timeout': 30
-            },
             'instagram': {
                 'requests_per_minute': 15,
                 'delay_between_requests': 4,
                 'max_comments_per_video': 500,
                 'timeout': 25
-            },
-            'facebook': {
-                'requests_per_minute': 10,
-                'delay_between_requests': 6,
-                'max_comments_per_video': 800,
-                'timeout': 35
             }
         }
         

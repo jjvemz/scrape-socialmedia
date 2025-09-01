@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Social Media Scraper - Controlador Principal
-Permite scraping de comentarios de TikTok, Instagram y Facebook
+Permite scraping de comentarios de Instagram
 """
 
 import os
@@ -17,9 +17,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from utils.url_validator import URLValidator
 from utils.file_handler import FileHandler
 from utils.scrapfly_config import ScrapFlyConfig
-from tiktok_scraper import TikTokScraper
-from instagram_scraper import InstagramScraper  
-from facebook_scraper import FacebookScraper
+from instagram_scraper import InstagramScraper
 
 # Inicializar colorama para Windows
 init(autoreset=True)
@@ -29,56 +27,40 @@ class SocialMediaController:
         self.validator = URLValidator()
         self.file_handler = FileHandler()
         self.scrapers = {
-            'tiktok': TikTokScraper(),
-            'instagram': InstagramScraper(),
-            'facebook': FacebookScraper()
+            'instagram': InstagramScraper()
         }
         self.results = []
         
     def print_banner(self):
         """Muestra el banner de la aplicación"""
         print(f"{Fore.CYAN}{'='*60}")
-        print(f"{Fore.CYAN}    SOCIAL MEDIA SCRAPER v1.0")
-        print(f"{Fore.CYAN}    Extractor de comentarios para TikTok, Instagram y Facebook")
+        print(f"{Fore.CYAN}    INSTAGRAM SCRAPER v1.0")
+        print(f"{Fore.CYAN}    Extractor de comentarios para Instagram")
         print(f"{Fore.CYAN}{'='*60}")
         print()
         
     def get_user_input(self):
         """Obtiene la entrada del usuario"""
-        print(f"{Fore.YELLOW}Plataformas disponibles:")
-        print(f"{Fore.WHITE}1. TikTok")
-        print(f"{Fore.WHITE}2. Instagram") 
-        print(f"{Fore.WHITE}3. Facebook")
+        print(f"{Fore.YELLOW}Plataforma disponible:")
+        print(f"{Fore.WHITE}Instagram") 
         print()
         
-        # Selección de plataforma
-        while True:
-            try:
-                platform_choice = input(f"{Fore.GREEN}Selecciona la plataforma (1-3): {Style.RESET_ALL}")
-                platform_map = {'1': 'tiktok', '2': 'instagram', '3': 'facebook'}
-                
-                if platform_choice in platform_map:
-                    platform = platform_map[platform_choice]
-                    break
-                else:
-                    print(f"{Fore.RED}ERROR: Selección inválida. Ingresa 1, 2 o 3.")
-            except KeyboardInterrupt:
-                print(f"\n{Fore.YELLOW}ERROR: Proceso cancelado por el usuario.")
-                sys.exit(0)
+        # Set platform directly to Instagram
+        platform = 'instagram'
+        print(f"{Fore.GREEN}Plataforma seleccionada: {platform.upper()}")
         
         # Instagram authentication prompt
-        if platform == 'instagram':
-            print(f"\n{Fore.CYAN}INSTAGRAM AUTHENTICATION")
-            print(f"{Fore.YELLOW}Instagram requires login for full comment access.")
-            print(f"{Fore.WHITE}Without login, you may get limited data or errors.")
-            
-            use_auth = input(f"{Fore.GREEN}Do you want to login to Instagram? (y/n): {Style.RESET_ALL}").lower().strip()
-            
-            if use_auth in ['y', 'yes', 'si', 's']:
-                self._instagram_login()
-            else:
-                print(f"{Fore.YELLOW}Continuing without Instagram authentication...")
-                print(f"{Fore.WHITE}You may experience limited data extraction.")
+        print(f"\n{Fore.CYAN}INSTAGRAM AUTHENTICATION")
+        print(f"{Fore.YELLOW}Instagram requires login for full comment access.")
+        print(f"{Fore.WHITE}Without login, you may get limited data or errors.")
+        
+        use_auth = input(f"{Fore.GREEN}Do you want to login to Instagram? (y/n): {Style.RESET_ALL}").lower().strip()
+        
+        if use_auth in ['y', 'yes', 'si', 's']:
+            self._instagram_login()
+        else:
+            print(f"{Fore.YELLOW}Continuing without Instagram authentication...")
+            print(f"{Fore.WHITE}You may experience limited data extraction.")
         
         # Número de URLs
         while True:
@@ -96,7 +78,7 @@ class SocialMediaController:
         
         # Recolección de URLs
         urls = []
-        print(f"\n{Fore.YELLOW}Ingresa las URLs de {platform.upper()}:")
+        print(f"\n{Fore.YELLOW}Ingresa las URLs de INSTAGRAM:")
         
         for i in range(num_urls):
             while True:
@@ -108,7 +90,7 @@ class SocialMediaController:
                         print(f"{Fore.GREEN}OK: URL válida")
                         break
                     else:
-                        print(f"{Fore.RED}ERROR: URL inválida para {platform}. Intenta de nuevo.")
+                        print(f"{Fore.RED}ERROR: URL inválida para Instagram. Intenta de nuevo.")
                 except KeyboardInterrupt:
                     print(f"\n{Fore.YELLOW}ERROR: Proceso cancelado por el usuario.")
                     sys.exit(0)

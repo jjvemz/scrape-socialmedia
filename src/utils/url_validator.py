@@ -10,12 +10,6 @@ from urllib.parse import urlparse
 class URLValidator:
     def __init__(self):
         self.platform_patterns = {
-            'tiktok': [
-                r'https?://(?:www\.)?tiktok\.com/@[\w.-]+/video/\d+',
-                r'https?://(?:www\.)?tiktok\.com/t/\w+',
-                r'https?://vm\.tiktok\.com/\w+',
-                r'https?://(?:www\.)?tiktok\.com/@[\w.-]+/video/\d+\?.*'
-            ],
             'instagram': [
                 r'https?://(?:www\.)?instagram\.com/[\w.-]+/p/[\w-]+/?.*',
                 r'https?://(?:www\.)?instagram\.com/[\w.-]+/reel/[\w-]+/?.*',
@@ -23,17 +17,6 @@ class URLValidator:
                 r'https?://(?:www\.)?instagram\.com/p/[\w-]+/?.*',
                 r'https?://(?:www\.)?instagram\.com/reel/[\w-]+/?.*',
                 r'https?://(?:www\.)?instagram\.com/tv/[\w-]+/?.*'
-            ],
-            'facebook': [
-                r'https?://(?:www\.)?facebook\.com/watch/?\?v=\d+',
-                r'https?://(?:www\.)?facebook\.com/[\w.-]+/videos/\d+',
-                r'https?://(?:www\.)?facebook\.com/video\.php\?v=\d+',
-                r'https?://(?:www\.)?facebook\.com/[\w.-]+/posts/\d+',
-                r'https?://(?:m\.)?facebook\.com/watch/?\?v=\d+',
-                r'https?://(?:www\.)?fb\.watch/[\w-]+',
-                r'https?://(?:www\.)?facebook\.com/share/v/[\w]+/',
-                r'https?://(?:www\.)?facebook\.com/reel/\d+/?.*',  # Support for Facebook reels
-                r'https?://(?:www\.)?facebook\.com/[\w.-]+/reel/\d+/?.*'  # User-specific reels
             ]
         }
         
@@ -43,7 +26,7 @@ class URLValidator:
         
         Args:
             url (str): URL a validar
-            platform (str): Plataforma esperada ('tiktok', 'instagram', 'facebook')
+            platform (str): Plataforma esperada ('instagram')
             
         Returns:
             bool: True si la URL es válida para la plataforma
@@ -139,31 +122,11 @@ class URLValidator:
         Returns:
             str: URL normalizada
         """
-        if platform == 'tiktok':
-            # Limpiar parámetros de tracking de TikTok
-            if '?' in url:
-                base_url = url.split('?')[0]
-                return base_url
-                
-        elif platform == 'instagram':
+        if platform == 'instagram':
             # Limpiar parámetros de Instagram
             if '?' in url:
                 base_url = url.split('?')[0]
                 return base_url.rstrip('/')
-                
-        elif platform == 'facebook':
-            # Normalizar URLs de Facebook
-            if 'fb.watch' in url:
-                return url  # fb.watch URLs suelen estar ya normalizadas
-            if '?' in url and 'v=' in url:
-                # Mantener solo el parámetro v
-                parts = url.split('?')
-                base = parts[0]
-                params = parts[1]
-                if 'v=' in params:
-                    video_id = re.search(r'v=(\d+)', params)
-                    if video_id:
-                        return f"{base}?v={video_id.group(1)}"
         
         return url
     
@@ -189,20 +152,9 @@ class URLValidator:
     def _get_example_urls(self, platform):
         """Devuelve URLs de ejemplo para cada plataforma"""
         examples = {
-            'tiktok': [
-                'https://www.tiktok.com/@username/video/1234567890123456789',
-                'https://vm.tiktok.com/ZMh4k3j2L/'
-            ],
             'instagram': [
                 'https://www.instagram.com/p/ABC123DEF456/',
                 'https://www.instagram.com/reel/XYZ789ABC123/'
-            ],
-            'facebook': [
-                'https://www.facebook.com/watch/?v=123456789012345',
-                'https://www.facebook.com/username/videos/123456789012345',
-                'https://fb.watch/abc123def456',
-                'https://www.facebook.com/reel/123456789012345',
-                'https://www.facebook.com/username/reel/123456789012345'
             ]
         }
         
