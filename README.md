@@ -20,19 +20,38 @@ Un potente extractor de comentarios de Instagram que obtiene comentarios reales,
 
 ## 🚀 Configuración Rápida
 
-### 1. Instalar Dependencias
+### Opción 1: Configuración Automática (Recomendada)
+
+**Windows:**
+```cmd
+launcher.bat
+```
+
+**Mac/Linux:**
+```bash
+./launcher.sh
+```
+
+**Multiplataforma (detección automática):**
+```bash
+./launch.sh
+```
+
+### Opción 2: Configuración Manual
+
+#### 1. Instalar Dependencias
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Obtener Clave API de ScrapFly
+#### 2. Obtener Clave API de ScrapFly
 
 1. Visita [ScrapFly.io](https://scrapfly.io/) y crea una cuenta gratuita
 2. Copia tu clave API desde el panel de control
 3. El extractor te pedirá la clave API en la primera ejecución
 
-### 3. Ejecutar el Extractor
+#### 3. Ejecutar el Extractor
 
 ```bash
 cd src
@@ -45,6 +64,20 @@ python main_controller.py
 Descarga este proyecto a tu máquina local.
 
 ### Paso 2: Configurar Entorno Python (Recomendado)
+
+**Usando scripts automatizados (más fácil):**
+
+Windows:
+```cmd
+launcher.bat
+```
+
+Mac/Linux:
+```bash
+./launcher.sh
+```
+
+**Configuración manual:**
 
 ```bash
 # Crear entorno virtual
@@ -222,6 +255,12 @@ scrape-socialmedia/
 ├── scrape/
 │   └── instagram/                  # Carpeta de salida para datos extraídos
 ├── logs/                           # Logs de la aplicación
+├── launcher.bat                    # Launcher automático para Windows
+├── launcher.sh                     # Launcher automático para Mac/Linux
+├── launch.sh                       # Launcher multiplataforma (detección automática)
+├── activate_venv.sh                # Activar entorno virtual (Mac/Linux)
+├── deactivate_venv.sh              # Desactivar entorno virtual (Mac/Linux)
+├── MAC_SETUP.md                    # Instrucciones específicas para Mac
 ├── requirements.txt                # Dependencias de Python
 └── README.md                       # Este archivo
 ```
