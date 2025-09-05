@@ -36,3 +36,5 @@ else
     echo "[ERROR] Failed to activate virtual environment"
     exit 1
 fi
+
+# FOR MAC

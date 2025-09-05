@@ -137,6 +137,12 @@ fi
 # Restore the configuration
 export PIP_ONLY_BINARY=:all:
 
+# Install dependencies from requirements.txt if it exists
+if [[ -f "requirements.txt" ]]; then
+    echo "[INFO] Installing dependencies from requirements.txt..."
+    python -m pip install -r requirements.txt --no-cache-dir --prefer-binary
+fi
+
 # Verify that critical dependencies are installed
 echo "[INFO] Verifying installation..."
 if python -c "import colorama, requests, openpyxl, bs4, scrapfly; print('[OK] All critical dependencies installed')" >/dev/null 2>&1; then
@@ -201,3 +207,5 @@ fi
 echo
 echo "[INFO] Process completed. Press any key to exit."
 read -p ""
+
+# FOR MAC

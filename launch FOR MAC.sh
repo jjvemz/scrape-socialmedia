@@ -45,5 +45,12 @@ fi
 echo "[INFO] Running launcher: $SCRIPT"
 echo
 
+# Check if requirements.txt exists and install dependencies
+if [[ -f "requirements.txt" ]]; then
+    echo "[INFO] Found requirements.txt - dependencies will be installed by launcher"
+fi
+
 # Execute the appropriate launcher
 exec "$SCRIPT"
+
+# FOR MAC

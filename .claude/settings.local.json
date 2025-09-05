@@ -7,7 +7,10 @@
       "Bash(del \"C:\\Users\\Usuario\\Desktop\\Portfolio\\DataAnalysis\\claudeScraper\\scrape-socialmedia\\src\\facebook_scraper_lib.py\")",
       "Bash(del \"C:\\Users\\Usuario\\Desktop\\Portfolio\\DataAnalysis\\claudeScraper\\scrape-socialmedia\\test_facebook_lib.py\")",
       "Bash(del \"C:\\Users\\Usuario\\Desktop\\Portfolio\\DataAnalysis\\claudeScraper\\scrape-socialmedia\\src\\javascript\\facebook_comments.js\")",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "WebSearch",
+      "Bash(chmod:*)",
+      "Bash(bash:*)"
     ],
     "deny": [],
     "ask": []

@@ -19,3 +19,5 @@ else
     echo "[WARNING] deactivate function not found"
     echo "[INFO] You may need to close this terminal session"
 fi
+
+# FOR MAC
